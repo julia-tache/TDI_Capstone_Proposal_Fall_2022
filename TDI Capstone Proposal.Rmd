@@ -1,0 +1,167 @@
+---
+title: "TDI Capstone Proposal"
+output: html_document
+date: '2022-07-06'
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+```
+
+```{r load data}
+library(tidyverse)
+library(countrycode)
+library(ggflags)
+library(scales)
+library(ggtext)
+
+civilian_attacks <- read_csv("Data/civilian_attacks.csv")
+gdp_per_capita <- read_csv("Data/gdp_per_capita.csv")
+unemployment_by_country <- read_csv("Data/unemployment_by_country.csv")
+population_by_country <- read_csv("Data/population_by_country_2020.csv")
+```
+
+
+```{r graph 1}
+civilian_attacks_graph <- civilian_attacks %>%
+  filter(YEAR == 2020) %>%
+  filter(SUB_EVENT_TYPE == "Excessive force against protesters") %>%
+  select(SUB_EVENT_TYPE, COUNTRY) %>%
+  group_by(COUNTRY) %>%
+  tally() 
+
+civilian_attacks_graph <- civilian_attacks_graph %>%
+  arrange(desc(n))
+
+civilian_attacks_graph_top_20 <- civilian_attacks_graph[1:20, ]
+
+civilian_attacks_graph_top_20$iso2 <- countrycode(civilian_attacks_graph_top_20$COUNTRY, "country.name", "iso2c")
+civilian_attacks_graph_top_20$iso2 <- tolower(civilian_attacks_graph_top_20$iso2)
+
+civilian_attacks_graph_top_20$continent <- countrycode(civilian_attacks_graph_top_20$iso2, "iso2c", "continent")
+
+ggplot(civilian_attacks_graph_top_20, 
+       aes(x = reorder(COUNTRY, n), y = n, fill = continent)) +
+  geom_bar(stat = "identity") +
+  geom_flag(y = -1, aes(country = iso2), size = 4) +
+  scale_y_continuous(expand = c(0.1, 0.1)) +
+  scale_y_continuous(breaks = scales::pretty_breaks(15)) +
+  labs(title = "Incidents of excessive force \nused against protestors (2020)",
+       subtitle = "Top 20 countries with incidents of exessive force.",
+       caption = "Source: ACLED") +
+  theme(legend.title = element_blank(),
+        axis.title.x = element_blank(),
+        axis.title.y = element_blank(),
+        axis.ticks.y = element_blank(),
+        panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(), 
+        plot.title = element_text(hjust = 0.5),
+        plot.subtitle = element_text(hjust = 0.5),
+        plot.caption = element_text(hjust = 0.5),
+        text = element_text(family = "Times New Roman"),
+        plot.background = element_rect(fill = "#fff8e7"),
+        panel.background = element_rect(fill = "white")) +
+  coord_flip()
+
+ggsave("graph_1.png")
+
+```
+
+```{r graph 2}
+
+population_by_country <- population_by_country %>%
+  rename("COUNTRY" = "Country (or dependency)")
+
+joined_df <- left_join(civilian_attacks_graph, population_by_country, by = "COUNTRY")
+
+joined_df$`Excessive force against protesters per 10 mil` <- (joined_df$n / joined_df$`Population (2020)`) * 10000000
+
+joined_df <- joined_df %>% 
+  arrange(desc(`Excessive force against protesters per 10 mil`))
+
+joined_df <- joined_df[1:20, ]
+
+joined_df$iso2 <- countrycode(joined_df$COUNTRY, "country.name", "iso2c")
+joined_df$iso2 <- tolower(joined_df$iso2)
+
+joined_df$continent <- countrycode(joined_df$iso2, "iso2c", "continent")
+
+ggplot(joined_df, 
+       aes(x = reorder(COUNTRY, 
+                       `Excessive force against protesters per 10 mil`), 
+           y = `Excessive force against protesters per 10 mil`,
+           fill = continent)) +
+  geom_bar(stat = "identity") +
+  geom_flag(y = -1, aes(country = iso2), size = 4) +
+  scale_y_continuous(expand = c(0.1, 1)) +
+  scale_y_continuous(breaks = scales::pretty_breaks(15)) +
+  labs(title = "Incidents per 10 mil people of excessive \nforce used against protestors (2020)",
+       subtitle = "Top 20 countries with incidents of exessive force per 10 mil people.",
+       caption = "Source: ACLED") +
+  theme(legend.title = element_blank(),
+        axis.title.x = element_blank(),
+        axis.title.y = element_blank(),
+        axis.ticks.y = element_blank(),
+        panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(), 
+        plot.title = element_text(hjust = 0.5),
+        plot.subtitle = element_text(hjust = 0.5),
+        plot.caption = element_text(hjust = 0.5),
+        text = element_text(family = "Times New Roman"),
+        plot.background = element_rect(fill = "#fff8e7"),
+        panel.background = element_rect(fill = "white")) +
+  coord_flip()
+
+ggsave("graph_2.png")
+
+```
+```{r}
+library(ggthemes)
+
+civilian_attacks_num <- civilian_attacks %>%
+  group_by(COUNTRY) %>%
+  tally()
+
+gdp_per_capita <- gdp_per_capita %>%
+  rename("COUNTRY" = "Country Name")
+
+joined_df <- left_join(civilian_attacks_num, gdp_per_capita)
+
+joined_df_graph <- joined_df %>%
+  select(COUNTRY, n, `2021 [YR2021]`) %>%
+  arrange(n)
+
+joined_df_graph$`2021 [YR2021]` <- round(as.numeric(joined_df_graph$`2021 [YR2021]`), digits = 2)
+
+joined_df_graph <- na.omit(joined_df_graph)
+
+joined_df_graph <- left_join(joined_df_graph, population_by_country, by = "COUNTRY")
+
+joined_df_graph$`Civilian attacks per 10 mil` <- (joined_df_graph$n / joined_df_graph$`Population (2020)`) * 10000000
+
+ggplot(joined_df_graph) + 
+  geom_bar(aes(x = reorder(COUNTRY, -`Civilian attacks per 10 mil`),
+               y = `Civilian attacks per 10 mil`), stat = "identity", fill = "cyan", colour = "#006000") +
+  geom_line(aes(x = COUNTRY, y = `2021 [YR2021]`/10, group = 1),
+            stat = "identity", color = "red", size = 0.1) +
+  labs(title = "Incidents per 10 mil people of violence \nused against civilians vs. country GDP per capita (2020)",
+       subtitle = "Generally, countries with lower GDPs per capita have more incidents \nof violence against civilians by government, military, and police forces",
+       caption = "Source: ACLED") +
+  scale_y_continuous(sec.axis = sec_axis(~., 
+                                         name = "GDP per Capita", 
+                                         labels = scales::dollar_format())) +
+  theme_calc() +
+  theme(legend.title = element_blank(),
+        axis.title.x = element_blank(),
+        axis.text.x = element_text(angle = 90, size = 3.5, vjust = 0.5),
+        axis.ticks.y = element_blank(),
+        plot.title = element_text(hjust = 0.5),
+        plot.subtitle = element_text(hjust = 0.5),
+        plot.caption = element_text(hjust = 0.5),
+        text = element_text(family = "Times New Roman"),
+        plot.background = element_rect(fill = "#fff8e7"))
+
+ggsave("graph_3.png")
+```
+
+
